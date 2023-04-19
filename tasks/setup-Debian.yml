@@ -1,18 +1,42 @@
 ---
 - name: Add required dependencies.
-  apt:
+  ansible.builtin.apt:
     name:
       - apt-transport-https
       - gnupg2
     state: present
 
+- name: Delete apt key from /etc/apt/trusted.gpg.
+  ansible.builtin.apt_key:
+    id: 46095ACC8548582C1A2699A9D27D666CD88E42B4
+    keyring: /etc/apt/trusted.gpg
+    state: absent
+
+- name: Delete unsigned Elasticsearch repository.
+  ansible.builtin.file:
+    path: "/etc/apt/sources.list.d/artifacts_elastic_co_packages_{{ elasticsearch_version | replace('.','_') }}_apt.list"
+    state: absent
+
+- name: Ensure keyring directory exists.
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
 - name: Add Elasticsearch apt key.
-  apt_key:
+  ansible.builtin.get_url:
     url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
-    state: present
+    dest: /etc/apt/keyrings/elasticsearch.asc
+    owner: root
+    group: root
+    mode: 0644
+  register: download_output
+  retries: 5
+  until: download_output is not failed
 
 - name: Add Elasticsearch repository.
-  apt_repository:
-    repo: 'deb https://artifacts.elastic.co/packages/{{ elasticsearch_version }}/apt stable main'
-    state: present
-    update_cache: true
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/elasticsearch.asc] https://artifacts.elastic.co/packages/{{ elasticsearch_version }}/apt stable main"
+    filename: "elasticsearch_{{ elasticsearch_version | replace('.','_') }}"
